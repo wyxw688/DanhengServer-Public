@@ -1,76 +1,40 @@
 ﻿using EggLink.DanhengServer.Data;
-using EggLink.DanhengServer.Data.Config;
 using EggLink.DanhengServer.Data.Excel;
-using EggLink.DanhengServer.Game.Player;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using EggLink.DanhengServer.GameServer.Game.Player;
 
-namespace EggLink.DanhengServer.Game.Task
+namespace EggLink.DanhengServer.GameServer.Game.Task;
+
+public class PerformanceTrigger(PlayerInstance player)
 {
-    public class PerformanceTrigger(PlayerInstance player) : BasePlayerManager(player)
+    public PlayerInstance Player { get; } = player;
+
+    public void TriggerPerformanceE(int performanceEId, SubMissionExcel subMission)
     {
-        public void TriggerPerformance(int performanceId)
-        {
-            GameData.PerformanceEData.TryGetValue(performanceId, out var excel);
-            if (excel != null)
-            {
-                TriggerPerformance(excel);
-            }
-        }
+        GameData.PerformanceEData.TryGetValue(performanceEId, out var excel);
+        if (excel != null) TriggerPerformanceE(excel, subMission);
+    }
 
-        public void TriggerPerformance(PerformanceEExcel excel)
-        {
-            if (excel.ActInfo == null) return;
-            foreach (var act in excel.ActInfo.OnInitSequece)
-            {
-                TriggerAct(act);
-            }
+    public void TriggerPerformanceE(PerformanceEExcel excel, SubMissionExcel subMission)
+    {
+        if (excel.ActInfo == null) return;
+        foreach (var act in excel.ActInfo.OnInitSequece) Player.TaskManager?.LevelTask.TriggerInitAct(act, subMission);
 
-            foreach (var act in excel.ActInfo.OnStartSequece)
-            {
-                TriggerAct(act);
-            }
-        }
+        foreach (var act in excel.ActInfo.OnStartSequece)
+            Player.TaskManager?.LevelTask.TriggerStartAct(act, subMission);
+    }
 
-        private void TriggerAct(MissionActTaskInfo act)
-        {
-            foreach (var task in act.TaskList)
-            {
-                TriggerTask(task);
-            }
+    public void TriggerPerformanceD(int performanceDId, SubMissionExcel subMission)
+    {
+        GameData.PerformanceDData.TryGetValue(performanceDId, out var excel);
+        if (excel != null) TriggerPerformanceD(excel, subMission);
+    }
 
-            foreach (var task in act.TaskList)
-            {
-                TriggerTask(task);
-            }
-        }
+    public void TriggerPerformanceD(PerformanceDExcel excel, SubMissionExcel subMission)
+    {
+        if (excel.ActInfo == null) return;
+        foreach (var act in excel.ActInfo.OnInitSequece) Player.TaskManager?.LevelTask.TriggerInitAct(act, subMission);
 
-        private void TriggerTask(MissionActTaskInfo act)
-        {
-            try
-            {
-                var methodName = act.Type.Replace("RPG.GameCore.", "");
-
-                var method = GetType().GetMethod(methodName);
-                if (method != null)
-                {
-                    _ = method.Invoke(this, [act]);
-                }
-            } catch
-            {
-            }
-        }
-
-        #region Task
-
-        public void PlayMessage(MissionActTaskInfo act)
-        {
-            Player.MessageManager!.AddMessageSection(act.MessageSectionID);
-        }
-
-        #endregion
+        foreach (var act in excel.ActInfo.OnStartSequece)
+            Player.TaskManager?.LevelTask.TriggerStartAct(act, subMission);
     }
 }
