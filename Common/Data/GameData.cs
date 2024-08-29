@@ -1,4 +1,4 @@
-﻿using EggLink.DanhengServer.Data.Config;
+﻿using EggLink.DanhengServer.Data.Config.Scene;
 using EggLink.DanhengServer.Data.Custom;
 using EggLink.DanhengServer.Data.Excel;
 using EggLink.DanhengServer.Enums.Rogue;
@@ -55,6 +55,7 @@ public static class GameData
     public static Dictionary<int, NPCMonsterDataExcel> NpcMonsterDataData { get; private set; } = [];
     public static Dictionary<int, MonsterConfigExcel> MonsterConfigData { get; private set; } = [];
     public static Dictionary<int, MonsterDropExcel> MonsterDropData { get; private set; } = [];
+    public static Dictionary<int, BattleCollegeConfigExcel> BattleCollegeConfigData { get; private set; } = [];
 
     #endregion
 
@@ -201,9 +202,35 @@ public static class GameData
     public static Dictionary<int, List<int>> RogueMiracleGroupData { get; set; } = [];
     public static Dictionary<int, RogueMiracleDisplayExcel> RogueMiracleDisplayData { get; private set; } = [];
     public static Dictionary<int, RogueMonsterExcel> RogueMonsterData { get; private set; } = [];
-    public static Dictionary<int, RogueNPCDialogueExcel> RogueNPCDialogueData { get; private set; } = [];
+    public static Dictionary<int, RogueNPCExcel> RogueNPCData { get; private set; } = [];
     public static Dictionary<int, RogueRoomExcel> RogueRoomData { get; private set; } = [];
     public static Dictionary<int, RogueTalentExcel> RogueTalentData { get; private set; } = [];
+
+    #endregion
+
+    #region TournRogue
+
+    public static Dictionary<int, RogueTournAreaExcel> RogueTournAreaData { get; private set; } = [];
+    public static Dictionary<int, RogueTournBuffExcel> RogueTournBuffData { get; private set; } = [];
+    public static Dictionary<int, RogueTournFormulaExcel> RogueTournFormulaData { get; private set; } = [];
+    public static Dictionary<int, RogueTournBuffGroupExcel> RogueTournBuffGroupData { get; private set; } = [];
+
+    public static Dictionary<int, RogueTournHexAvatarBaseTypeExcel> RogueTournHexAvatarBaseTypeData
+    {
+        get;
+        private set;
+    } = [];
+
+    public static Dictionary<int, RogueTournHandBookEventExcel> RogueTournHandBookEventData { get; private set; } = [];
+
+    public static Dictionary<int, RogueTournHandbookMiracleExcel> RogueTournHandbookMiracleData { get; private set; } =
+        [];
+
+    public static Dictionary<int, RogueTournDifficultyCompExcel> RogueTournDifficultyCompData { get; private set; } =
+        [];
+
+    public static Dictionary<int, RogueTournPermanentTalentExcel> RogueTournPermanentTalentData { get; private set; } =
+        [];
 
     #endregion
 

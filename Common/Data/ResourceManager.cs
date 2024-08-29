@@ -1,5 +1,7 @@
 ﻿using System.Reflection;
 using EggLink.DanhengServer.Data.Config;
+using EggLink.DanhengServer.Data.Config.Rogue;
+using EggLink.DanhengServer.Data.Config.Scene;
 using EggLink.DanhengServer.Data.Custom;
 using EggLink.DanhengServer.Data.Excel;
 using EggLink.DanhengServer.Enums.Rogue;
@@ -38,32 +40,46 @@ public class ResourceManager
     public static void LoadExcel()
     {
         var classes = Assembly.GetExecutingAssembly().GetTypes(); // Get all classes in the assembly
-        var resList = new List<ExcelResource>();
-        foreach (var cls in classes)
+        List<ExcelResource> resList = [];
+
+        foreach (var cls in classes.Where(x => x.IsSubclassOf(typeof(ExcelResource))))
         {
-            var attribute = (ResourceEntity)Attribute.GetCustomAttribute(cls, typeof(ResourceEntity))!;
+            var res = LoadSingleExcelResource(cls);
+            if (res != null) resList.AddRange(res);
+        }
 
-            if (attribute != null)
+        foreach (var cls in resList) cls.AfterAllDone();
+    }
+
+    public static List<T>? LoadSingleExcel<T>(Type cls) where T : ExcelResource, new() => LoadSingleExcelResource(cls) as List<T>;
+
+    public static List<ExcelResource>? LoadSingleExcelResource(Type cls)
+    {
+        var attribute = (ResourceEntity?)Attribute.GetCustomAttribute(cls, typeof(ResourceEntity));
+
+        if (attribute == null) return null;
+        var resource = (ExcelResource)Activator.CreateInstance(cls)!;
+        var count = 0;
+        List<ExcelResource> resList = [];
+        foreach (var fileName in attribute.FileName)
+            try
             {
-                var resource = (ExcelResource)Activator.CreateInstance(cls)!;
-                var count = 0;
-                foreach (var fileName in attribute.FileName)
-                    try
-                    {
-                        var path = ConfigManager.Config.Path.ResourcePath + "/ExcelOutput/" + fileName;
-                        var file = new FileInfo(path);
-                        if (!file.Exists)
-                        {
-                            Logger.Error(I18nManager.Translate("Server.ServerInfo.FailedToReadItem", fileName,
-                                I18nManager.Translate("Word.NotFound")));
-                            continue;
-                        }
+                var path = ConfigManager.Config.Path.ResourcePath + "/ExcelOutput/" + fileName;
+                var file = new FileInfo(path);
+                if (!file.Exists)
+                {
+                    Logger.Error(I18NManager.Translate("Server.ServerInfo.FailedToReadItem", fileName,
+                        I18NManager.Translate("Word.NotFound")));
+                    continue;
+                }
 
-                        var json = file.OpenText().ReadToEnd();
-                        using (var reader = new JsonTextReader(new StringReader(json)))
-                        {
-                            reader.Read();
-                            if (reader.TokenType == JsonToken.StartArray)
+                var json = file.OpenText().ReadToEnd();
+                using (var reader = new JsonTextReader(new StringReader(json)))
+                {
+                    reader.Read();
+                    switch (reader.TokenType)
+                    {
+                        case JsonToken.StartArray:
                             {
                                 // array
                                 var jArray = JArray.Parse(json);
@@ -74,15 +90,15 @@ public class ResourceManager
                                     ((ExcelResource?)res)?.Loaded();
                                     count++;
                                 }
+
+                                break;
                             }
-                            else if (reader.TokenType == JsonToken.StartObject)
+                        case JsonToken.StartObject:
                             {
                                 // dictionary
                                 var jObject = JObject.Parse(json);
-                                foreach (var item in jObject)
+                                foreach (var (_, obj) in jObject)
                                 {
-                                    var id = int.Parse(item.Key);
-                                    var obj = item.Value;
                                     var instance = JsonConvert.DeserializeObject(obj!.ToString(), cls);
 
                                     if (((ExcelResource?)instance)?.GetId() == 0 || (ExcelResource?)instance == null)
@@ -101,43 +117,44 @@ public class ResourceManager
                                     }
                                     else
                                     {
-                                        resList.Add((ExcelResource)instance!);
+                                        resList.Add((ExcelResource)instance);
                                         ((ExcelResource)instance).Loaded();
                                     }
 
                                     count++;
                                 }
+
+                                break;
                             }
-                        }
-
-                        resource.Finalized();
                     }
-                    catch (Exception ex)
-                    {
-                        Logger.Error(
-                            I18nManager.Translate("Server.ServerInfo.FailedToReadItem", fileName,
-                                I18nManager.Translate("Word.Error")), ex);
-                    }
+                }
 
-                Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(), cls.Name));
+                resource.Finalized();
             }
-        }
+            catch (Exception ex)
+            {
+                Logger.Error(
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", fileName,
+                        I18NManager.Translate("Word.Error")), ex);
+            }
 
-        foreach (var cls in resList) cls.AfterAllDone();
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(), cls.Name));
+
+        return resList;
     }
 
     public static void LoadFloorInfo()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem", I18nManager.Translate("Word.FloorInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem", I18NManager.Translate("Word.FloorInfo")));
         DirectoryInfo directory = new(ConfigManager.Config.Path.ResourcePath + "/Config/LevelOutput/RuntimeFloor/");
         var missingGroupInfos = false;
 
         if (!directory.Exists)
         {
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.FloorInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.FloorInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/LevelOutput/RuntimeFloor",
-                I18nManager.Translate("Word.FloorMissingResult")));
+                I18NManager.Translate("Word.FloorMissingResult")));
             return;
         }
 
@@ -155,8 +172,8 @@ public class ResourceManager
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                        I18NManager.Translate("Word.Error")), ex);
             }
 
         foreach (var info in GameData.FloorInfoData.Values)
@@ -187,19 +204,16 @@ public class ResourceManager
                             using StreamReader graphReader2 = new(graphReader);
                             var graphText = graphReader2.ReadToEnd().Replace("$type", "Type");
                             var graphObj = JObject.Parse(graphText);
-                            if (graphObj != null)
-                            {
-                                var graphInfo = LevelGraphConfigInfo.LoadFromJsonObject(graphObj);
-                                group.LevelGraphConfig = graphInfo;
-                            }
+                            var graphInfo = LevelGraphConfigInfo.LoadFromJsonObject(graphObj);
+                            group.LevelGraphConfig = graphInfo;
                         }
                     }
                 }
                 catch (Exception ex)
                 {
                     Logger.Error(
-                        I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                            I18nManager.Translate("Word.Error")), ex);
+                        I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                            I18NManager.Translate("Word.Error")), ex);
                 }
 
                 if (info.Groups.Count == 0) missingGroupInfos = true;
@@ -209,25 +223,25 @@ public class ResourceManager
         }
 
         if (missingGroupInfos)
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.FloorGroupInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.FloorGroupInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/LevelOutput/SharedRuntimeGroup",
-                I18nManager.Translate("Word.FloorGroupMissingResult")));
+                I18NManager.Translate("Word.FloorGroupMissingResult")));
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", GameData.FloorInfoData.Count.ToString(),
-            I18nManager.Translate("Word.FloorInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", GameData.FloorInfoData.Count.ToString(),
+            I18NManager.Translate("Word.FloorInfo")));
     }
 
     public static void LoadMissionInfo()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem", I18nManager.Translate("Word.MissionInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem", I18NManager.Translate("Word.MissionInfo")));
         DirectoryInfo directory = new(ConfigManager.Config.Path.ResourcePath + "/Config/Level/Mission");
         if (!directory.Exists)
         {
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.MissionInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.MissionInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/Level/Mission",
-                I18nManager.Translate("Word.Mission")));
+                I18NManager.Translate("Word.Mission")));
             return;
         }
 
@@ -248,16 +262,6 @@ public class ResourceManager
             if (missionInfo != null)
             {
                 GameData.MainMissionData[missionExcel.Key].MissionInfo = missionInfo;
-                foreach (var subMission in missionInfo.SubMissionList)
-                {
-                    // load mission json
-                    var missionJsonPath = ConfigManager.Config.Path.ResourcePath + "/" + subMission.MissionJsonPath;
-                    if (File.Exists(missionJsonPath))
-                    {
-                        var missionJson = File.ReadAllText(missionJsonPath).Replace("$type", "Type");
-                    }
-                }
-
                 count++;
             }
             else
@@ -267,22 +271,22 @@ public class ResourceManager
         }
 
         if (missingMissionInfos)
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.MissionInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.MissionInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/Level/Mission",
-                I18nManager.Translate("Word.Mission")));
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.MissionInfo")));
+                I18NManager.Translate("Word.Mission")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.MissionInfo")));
     }
 
     public static T? LoadCustomFile<T>(string filetype, string filename)
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem", filetype));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem", filetype));
         FileInfo file = new(ConfigManager.Config.Path.ConfigPath + $"/{filename}.json");
         T? customFile = default;
         if (!file.Exists)
         {
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing", filetype,
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing", filetype,
                 $"{ConfigManager.Config.Path.ConfigPath}/{filename}.json", filetype));
             return customFile;
         }
@@ -300,27 +304,38 @@ public class ResourceManager
             Logger.Error("Error in reading " + file.Name, ex);
         }
 
-        if (customFile is Dictionary<int, int> d)
-            Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", d.Count.ToString(), filetype));
-        else if (customFile is Dictionary<int, List<int>> di)
-            Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", di.Count.ToString(), filetype));
-        else if (customFile is BannersConfig c)
-            Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", c.Banners.Count.ToString(), filetype));
-        else if (customFile is RogueMiracleEffectConfig r)
-            Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", r.Miracles.Count.ToString(), filetype));
-        else if (customFile is ActivityConfig a)
-            Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", a.ScheduleData.Count.ToString(),
-                filetype));
-        else
-            Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItem", filetype));
+        switch (customFile)
+        {
+            case Dictionary<int, int> d:
+                Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", d.Count.ToString(), filetype));
+                break;
+            case Dictionary<int, List<int>> di:
+                Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", di.Count.ToString(), filetype));
+                break;
+            case BannersConfig c:
+                Logger.Info(
+                    I18NManager.Translate("Server.ServerInfo.LoadedItems", c.Banners.Count.ToString(), filetype));
+                break;
+            case RogueMiracleEffectConfig r:
+                Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", r.Miracles.Count.ToString(),
+                    filetype));
+                break;
+            case ActivityConfig a:
+                Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", a.ScheduleData.Count.ToString(),
+                    filetype));
+                break;
+            default:
+                Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItem", filetype));
+                break;
+        }
 
         return customFile;
     }
 
     public static void LoadMazeSkill()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem",
-            I18nManager.Translate("Word.MazeSkillInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem",
+            I18NManager.Translate("Word.MazeSkillInfo")));
         var count = 0;
         foreach (var adventure in GameData.AdventurePlayerData.Values)
         {
@@ -342,28 +357,28 @@ public class ResourceManager
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", adventurePath,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", adventurePath,
+                        I18NManager.Translate("Word.Error")), ex);
             }
         }
 
         if (count < GameData.AdventurePlayerData.Count)
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.MazeSkillInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.MazeSkillInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/Level/AdventureAbility",
-                I18nManager.Translate("Word.MazeSkill")));
+                I18NManager.Translate("Word.MazeSkill")));
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.MazeSkillInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.MazeSkillInfo")));
     }
 
     public static void LoadDialogueInfo()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem", I18nManager.Translate("Word.DialogueInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem", I18NManager.Translate("Word.DialogueInfo")));
         var count = 0;
-        foreach (var dialogue in GameData.RogueNPCDialogueData)
+        foreach (var dialogue in GameData.RogueNPCData)
         {
-            var path = ConfigManager.Config.Path.ResourcePath + "/" + dialogue.Value.DialoguePath;
+            var path = ConfigManager.Config.Path.ResourcePath + "/" + dialogue.Value.NPCJsonPath;
             var file = new FileInfo(path);
             if (!file.Exists) continue;
             try
@@ -371,39 +386,36 @@ public class ResourceManager
                 using var reader = file.OpenRead();
                 using StreamReader reader2 = new(reader);
                 var text = reader2.ReadToEnd().Replace("$type", "Type");
-                var dialogueInfo = JsonConvert.DeserializeObject<DialogueInfo>(text);
+                var dialogueInfo = JsonConvert.DeserializeObject<RogueNPCConfigInfo>(text);
                 if (dialogueInfo != null)
                 {
-                    dialogue.Value.DialogueInfo = dialogueInfo;
+                    dialogue.Value.RogueNpcConfig = dialogueInfo;
                     dialogueInfo.Loaded();
-                    if (dialogueInfo.DialogueIds.Count == 0)
-                        // set to invalid
-                        dialogue.Value.DialogueInfo = null;
                     count++;
                 }
             }
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                        I18NManager.Translate("Word.Error")), ex);
             }
         }
 
-        if (count < GameData.RogueNPCDialogueData.Count)
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.DialogueInfo"),
+        if (count < GameData.RogueNPCData.Count)
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.DialogueInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/Level/Rogue/Dialogue",
-                I18nManager.Translate("Word.Dialogue")));
+                I18NManager.Translate("Word.Dialogue")));
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.DialogueInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.DialogueInfo")));
     }
 
     public static void LoadPerformanceInfo()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem",
-            I18nManager.Translate("Word.PerformanceInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem",
+            I18NManager.Translate("Word.PerformanceInfo")));
         var count = 0;
         foreach (var performance in GameData.PerformanceEData.Values)
         {
@@ -422,18 +434,15 @@ public class ResourceManager
                 using StreamReader reader2 = new(reader);
                 var text = reader2.ReadToEnd().Replace("$type", "Type");
                 var obj = JObject.Parse(text);
-                if (obj != null)
-                {
-                    var info = LevelGraphConfigInfo.LoadFromJsonObject(obj);
-                    performance.ActInfo = info;
-                    count++;
-                }
+                var info = LevelGraphConfigInfo.LoadFromJsonObject(obj);
+                performance.ActInfo = info;
+                count++;
             }
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                        I18NManager.Translate("Word.Error")), ex);
             }
         }
 
@@ -454,18 +463,15 @@ public class ResourceManager
                 using StreamReader reader2 = new(reader);
                 var text = reader2.ReadToEnd().Replace("$type", "Type");
                 var obj = JObject.Parse(text);
-                if (obj != null)
-                {
-                    var info = LevelGraphConfigInfo.LoadFromJsonObject(obj);
-                    performance.ActInfo = info;
-                    count++;
-                }
+                var info = LevelGraphConfigInfo.LoadFromJsonObject(obj);
+                performance.ActInfo = info;
+                count++;
             }
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                        I18NManager.Translate("Word.Error")), ex);
             }
         }
 
@@ -475,14 +481,14 @@ public class ResourceManager
             //Logger.Warn("Performance infos are missing, please check your resources folder: " + ConfigManager.Config.Path.ResourcePath + "/Config/Level/Mission/*/Act. Performances may not work!");
         }
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.PerformanceInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.PerformanceInfo")));
     }
 
     public static void LoadSubMissionInfo()
     {
         Logger.Info(
-            I18nManager.Translate("Server.ServerInfo.LoadingItem", I18nManager.Translate("Word.SubMissionInfo")));
+            I18NManager.Translate("Server.ServerInfo.LoadingItem", I18NManager.Translate("Word.SubMissionInfo")));
         var count = 0;
         foreach (var subMission in GameData.SubMissionData.Values)
         {
@@ -497,18 +503,15 @@ public class ResourceManager
                 using StreamReader reader2 = new(reader);
                 var text = reader2.ReadToEnd().Replace("$type", "Type");
                 var obj = JObject.Parse(text);
-                if (obj != null)
-                {
-                    var info = LevelGraphConfigInfo.LoadFromJsonObject(obj);
-                    subMission.SubMissionTaskInfo = info;
-                    count++;
-                }
+                var info = LevelGraphConfigInfo.LoadFromJsonObject(obj);
+                subMission.SubMissionTaskInfo = info;
+                count++;
             }
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                        I18NManager.Translate("Word.Error")), ex);
             }
         }
 
@@ -517,14 +520,14 @@ public class ResourceManager
             //Logger.Warn("Performance infos are missing, please check your resources folder: " + ConfigManager.Config.Path.ResourcePath + "/Config/Level/Mission/*/Act. Performances may not work!");
         }
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.SubMissionInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.SubMissionInfo")));
     }
 
     public static void LoadRogueChestMapInfo()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem",
-            I18nManager.Translate("Word.RogueChestMapInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem",
+            I18NManager.Translate("Word.RogueChestMapInfo")));
         var count = 0;
         var boardList = new List<RogueDLCChessBoardExcel>();
         foreach (var nousMap in GameData.RogueNousChessBoardData.Values) boardList.AddRange(nousMap);
@@ -558,35 +561,35 @@ public class ResourceManager
             catch (Exception ex)
             {
                 Logger.Error(
-                    I18nManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
-                        I18nManager.Translate("Word.Error")), ex);
+                    I18NManager.Translate("Server.ServerInfo.FailedToReadItem", file.Name,
+                        I18NManager.Translate("Word.Error")), ex);
             }
         }
 
         if (count < boardList.Count)
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.RogueChestMapInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.RogueChestMapInfo"),
                 $"{ConfigManager.Config.Path.ResourcePath}/Config/Gameplays/RogueDLC",
-                I18nManager.Translate("Word.RogueChestMap")));
+                I18NManager.Translate("Word.RogueChestMap")));
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.RogueChestMapInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.RogueChestMapInfo")));
     }
 
     public static void LoadChessRogueRoomData()
     {
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadingItem",
-            I18nManager.Translate("Word.ChessRogueRoomInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadingItem",
+            I18NManager.Translate("Word.ChessRogueRoomInfo")));
         var count = 0;
 
         FileInfo file = new(ConfigManager.Config.Path.ConfigPath + "/ChessRogueRoomGen.json");
         List<ChessRogueRoomConfig>? customFile;
         if (!file.Exists)
         {
-            Logger.Warn(I18nManager.Translate("Server.ServerInfo.ConfigMissing",
-                I18nManager.Translate("Word.ChessRogueRoomInfo"),
+            Logger.Warn(I18NManager.Translate("Server.ServerInfo.ConfigMissing",
+                I18NManager.Translate("Word.ChessRogueRoomInfo"),
                 $"{ConfigManager.Config.Path.ConfigPath}/ChessRogueRoomGen.json",
-                I18nManager.Translate("Word.ChessRogueRoom")));
+                I18NManager.Translate("Word.ChessRogueRoom")));
 
             return;
         }
@@ -600,39 +603,37 @@ public class ResourceManager
             customFile = json;
 
             foreach (var room in customFile!)
-                if (room.BlockType == RogueDLCBlockTypeEnum.MonsterNormal)
+                switch (room.BlockType)
                 {
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterNormal, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterSwarm, room);
-                    count += 2;
-                }
-                else if (room.BlockType == RogueDLCBlockTypeEnum.MonsterBoss)
-                {
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterBoss, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterNousBoss, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterSwarmBoss, room);
-                    count += 3;
-                }
-                else if (room.BlockType == RogueDLCBlockTypeEnum.Event)
-                {
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.Event, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.Reward, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.Adventure, room); // adventure is not this type
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.NousSpecialEvent, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.SwarmEvent, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.NousEvent, room);
-                    count += 6;
-                }
-                else if (room.BlockType == RogueDLCBlockTypeEnum.Trade)
-                {
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.Trade, room);
-                    AddRoomToGameData(RogueDLCBlockTypeEnum.BlackMarket, room);
-                    count += 2;
-                }
-                else
-                {
-                    AddRoomToGameData(room.BlockType, room);
-                    count++;
+                    case RogueDLCBlockTypeEnum.MonsterNormal:
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterNormal, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterSwarm, room);
+                        count += 2;
+                        break;
+                    case RogueDLCBlockTypeEnum.MonsterBoss:
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterBoss, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterNousBoss, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.MonsterSwarmBoss, room);
+                        count += 3;
+                        break;
+                    case RogueDLCBlockTypeEnum.Event:
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.Event, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.Reward, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.Adventure, room); // adventure is not this type
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.NousSpecialEvent, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.SwarmEvent, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.NousEvent, room);
+                        count += 6;
+                        break;
+                    case RogueDLCBlockTypeEnum.Trade:
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.Trade, room);
+                        AddRoomToGameData(RogueDLCBlockTypeEnum.BlackMarket, room);
+                        count += 2;
+                        break;
+                    default:
+                        AddRoomToGameData(room.BlockType, room);
+                        count++;
+                        break;
                 }
         }
         catch (Exception ex)
@@ -640,8 +641,8 @@ public class ResourceManager
             Logger.Error("Error in reading " + file.Name, ex);
         }
 
-        Logger.Info(I18nManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
-            I18nManager.Translate("Word.ChessRogueRoomInfo")));
+        Logger.Info(I18NManager.Translate("Server.ServerInfo.LoadedItems", count.ToString(),
+            I18NManager.Translate("Word.ChessRogueRoomInfo")));
     }
 
     public static void AddRoomToGameData(RogueDLCBlockTypeEnum type, ChessRogueRoomConfig room)

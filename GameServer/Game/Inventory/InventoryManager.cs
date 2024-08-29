@@ -251,7 +251,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
         }
 
         if (sync && removedItems.Count > 0) await Player.SendPacket(new PacketPlayerSyncScNotify(removedItems));
-        DatabaseHelper.Instance?.UpdateInstance(Data);
         return removedItems;
     }
 
@@ -486,8 +485,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
                 var i = (await Player.InventoryManager!.AddItem(item.ItemId, item.Count, false))!;
                 i.Count = item.Count; // return the all thing
             }
-
-            DatabaseHelper.Instance!.UpdateInstance(Player.InventoryManager!.Data);
         }
 
         return items;
@@ -553,7 +550,8 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
         return items;
     }
 
-    public async ValueTask<(Retcode, List<ItemData>? returnItems)> UseItem(int itemId, int count = 1, int baseAvatarId = 0)
+    public async ValueTask<(Retcode, List<ItemData>? returnItems)> UseItem(int itemId, int count = 1,
+        int baseAvatarId = 0)
     {
         GameData.ItemConfigData.TryGetValue(itemId, out var itemConfig);
         if (itemConfig == null) return (Retcode.RetItemNotExist, null);
@@ -561,12 +559,9 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
         GameData.ItemUseBuffDataData.TryGetValue(dataId, out var useConfig);
         if (useConfig == null) return (Retcode.RetItemUseConfigNotExist, null);
 
-        for (int i = 0; i < count; i++)  // do count times
+        for (var i = 0; i < count; i++) // do count times
         {
-            if (useConfig.PreviewSkillPoint != 0)
-            {
-                await Player.LineupManager!.GainMp((int)useConfig.PreviewSkillPoint);
-            }
+            if (useConfig.PreviewSkillPoint != 0) await Player.LineupManager!.GainMp((int)useConfig.PreviewSkillPoint);
 
             if (baseAvatarId > 0)
             {
@@ -578,25 +573,30 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
 
                 if (useConfig.PreviewHPRecoveryPercent != 0)
                 {
-                    avatar.SetCurHp(Math.Min(Math.Max(avatar.CurrentHp + (int)(useConfig.PreviewHPRecoveryPercent * 10000), 0), 10000), extraLineup);
+                    avatar.SetCurHp(
+                        Math.Min(Math.Max(avatar.CurrentHp + (int)(useConfig.PreviewHPRecoveryPercent * 10000), 0),
+                            10000), extraLineup);
 
                     await Player.SendPacket(new PacketSyncLineupNotify(Player.LineupManager.GetCurLineup()!));
                 }
 
                 if (useConfig.PreviewHPRecoveryValue != 0)
                 {
-                    avatar.SetCurHp(Math.Min(Math.Max(avatar.CurrentHp + (int)useConfig.PreviewHPRecoveryValue, 0), 10000), extraLineup);
+                    avatar.SetCurHp(
+                        Math.Min(Math.Max(avatar.CurrentHp + (int)useConfig.PreviewHPRecoveryValue, 0), 10000),
+                        extraLineup);
 
                     await Player.SendPacket(new PacketSyncLineupNotify(Player.LineupManager.GetCurLineup()!));
                 }
 
                 if (useConfig.PreviewPowerPercent != 0)
                 {
-                    avatar.SetCurSp(Math.Min(Math.Max(avatar.CurrentHp + (int)(useConfig.PreviewPowerPercent * 10000), 0), 10000), extraLineup);
+                    avatar.SetCurSp(
+                        Math.Min(Math.Max(avatar.CurrentHp + (int)(useConfig.PreviewPowerPercent * 10000), 0), 10000),
+                        extraLineup);
 
                     await Player.SendPacket(new PacketSyncLineupNotify(Player.LineupManager.GetCurLineup()!));
                 }
-
             }
             else
             {
@@ -626,22 +626,14 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
 
         //maze buff
         if (useConfig.MazeBuffID > 0)
-        {
             foreach (var info in Player.SceneInstance?.AvatarInfo.Values.ToList() ?? [])
-            {
                 if (baseAvatarId == 0 || info.AvatarInfo.GetBaseAvatarId() == baseAvatarId)
                     await info.AddBuff(new SceneBuff(useConfig.MazeBuffID, 1, info.AvatarInfo.AvatarId));
-            }
-        }
 
         if (useConfig.MazeBuffID2 > 0)
-        {
             foreach (var info in Player.SceneInstance?.AvatarInfo.Values.ToList() ?? [])
-            {
                 if (baseAvatarId == 0 || info.AvatarInfo.GetBaseAvatarId() == baseAvatarId)
                     await info.AddBuff(new SceneBuff(useConfig.MazeBuffID2, 1, info.AvatarInfo.AvatarId));
-            }
-        }
 
         // remove item
         await RemoveItem(itemId, count);
@@ -801,7 +793,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
 
         avatarData.Level = curLevel;
         avatarData.Exp = curExp;
-        DatabaseHelper.Instance!.UpdateInstance(Player.AvatarManager.AvatarData!);
         // leftover
         Dictionary<int, ItemData> list = [];
         var leftover = exp;
@@ -909,7 +900,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
 
         itemData.Level = curLevel;
         itemData.Exp = curExp;
-        DatabaseHelper.Instance!.UpdateInstance(Data);
         // leftover
         Dictionary<int, ItemData> list = [];
         var leftover = exp;
@@ -994,7 +984,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
             await Player.InventoryManager!.RemoveItem(cost.ItemID, cost.ItemNum);
 
         equipmentData.Promotion++;
-        DatabaseHelper.Instance!.UpdateInstance(Player.InventoryManager.Data);
         await Player.SendPacket(new PacketPlayerSyncScNotify(equipmentData));
 
         return true;
@@ -1130,7 +1119,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
         var avatarData = Player.AvatarManager!.GetAvatar(baseAvatarId);
         if (avatarData == null) return;
         avatarData.GetCurPathInfo().Rank++;
-        DatabaseHelper.Instance!.UpdateInstance(Player.AvatarManager.AvatarData!);
         await Player.SendPacket(new PacketPlayerSyncScNotify(avatarData));
     }
 
@@ -1148,7 +1136,6 @@ public class InventoryManager(PlayerInstance player) : BasePlayerManager(player)
         var itemData = Data.EquipmentItems.Find(x => x.UniqueId == equipmentUniqueId);
         if (itemData == null) return;
         itemData.Rank += rank;
-        DatabaseHelper.Instance!.UpdateInstance(Data);
         await Player.SendPacket(new PacketPlayerSyncScNotify(itemData));
     }
 
